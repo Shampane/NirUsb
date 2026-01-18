@@ -30,6 +30,12 @@ public class UserRepository : IUserRepository {
     }
 
 
+    public async Task RemoveAllUser() {
+        await _dbContext.Users.ExecuteDeleteAsync();
+        await _dbContext.SaveChangesAsync();
+    }
+
+
     public async Task<bool> IsUserExists(string name) {
         return await _dbContext.Users.AnyAsync(u => u.Name == name);
     }

@@ -7,8 +7,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\NirUsb.Domain\NirUsb.Domain.csproj" />
-      <ProjectReference Include="..\NirUsb.Infrastructure\NirUsb.Infrastructure.csproj" />
+        <ProjectReference Include="..\NirUsb.Domain\NirUsb.Domain.csproj"/>
+        <ProjectReference Include="..\NirUsb.Infrastructure\NirUsb.Infrastructure.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1"/>
     </ItemGroup>
 
 </Project>

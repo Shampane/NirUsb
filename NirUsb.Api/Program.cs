@@ -1,4 +1,7 @@
+using NirUsb.Application.Services;
+using NirUsb.Domain.Interfaces;
 using NirUsb.Infrastructure.DataAccess;
+using NirUsb.Infrastructure.Repositories;
 using Scalar.AspNetCore;
 
 namespace NirUsb.Api;
@@ -8,6 +11,9 @@ public static class Program {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
         builder.Services.AddDbContext<AppDbContext>();
+        builder.Services.AddScoped<IUserRepository, UserRepository>();
+        builder.Services.AddScoped<ICryptoService, CryptoService>();
+
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();
 
