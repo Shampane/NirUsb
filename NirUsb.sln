@@ -2,6 +2,12 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NirUsb.Api", "NirUsb.Api\NirUsb.Api.csproj", "{F06250DB-886A-41A6-B8F0-14AAB502BA17}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NirUsb.Domain", "NirUsb.Domain\NirUsb.Domain.csproj", "{00DD70CA-2484-47A3-980F-7203135D90C9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NirUsb.Application", "NirUsb.Application\NirUsb.Application.csproj", "{E2BBA22C-C776-479B-9B49-065A394E7389}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NirUsb.Infrastructure", "NirUsb.Infrastructure\NirUsb.Infrastructure.csproj", "{87AB49FA-2AC9-4B9A-9814-9590447DD401}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +18,17 @@ Global
 		{F06250DB-886A-41A6-B8F0-14AAB502BA17}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F06250DB-886A-41A6-B8F0-14AAB502BA17}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F06250DB-886A-41A6-B8F0-14AAB502BA17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00DD70CA-2484-47A3-980F-7203135D90C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00DD70CA-2484-47A3-980F-7203135D90C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00DD70CA-2484-47A3-980F-7203135D90C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00DD70CA-2484-47A3-980F-7203135D90C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2BBA22C-C776-479B-9B49-065A394E7389}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2BBA22C-C776-479B-9B49-065A394E7389}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2BBA22C-C776-479B-9B49-065A394E7389}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2BBA22C-C776-479B-9B49-065A394E7389}.Release|Any CPU.Build.0 = Release|Any CPU
+		{87AB49FA-2AC9-4B9A-9814-9590447DD401}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87AB49FA-2AC9-4B9A-9814-9590447DD401}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87AB49FA-2AC9-4B9A-9814-9590447DD401}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87AB49FA-2AC9-4B9A-9814-9590447DD401}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
