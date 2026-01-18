@@ -1,5 +1,5 @@
-﻿using System.Diagnostics;
-using System.Text;
+﻿using System.Management;
+using System.Runtime.Versioning;
 using NirUsb.Domain.Enums;
 using NirUsb.Domain.Models;
 
@@ -15,11 +15,46 @@ public static class UsbHelper {
     }
 
 
+    [SupportedOSPlatform("windows")]
     private static List<UsbDevice> GetAllOnWindows() {
         List<UsbDevice> devices = [];
+        ManagementObjectSearcher driveQuery =
+            new("SELECT * FROM Win32_DiskDrive WHERE InterfaceType='USB'");
+
+        foreach (ManagementBaseObject? o in driveQuery.Get()) {
+            var drive = (ManagementObject)o;
+            string id = drive["SerialNumber"].ToString()!;
+            string model = drive["Model"].ToString()!;
+
+            foreach (ManagementBaseObject? managementBaseObject in drive.GetRelated(
+                "Win32_DiskPartition"
+            )) {
+                var partition = (ManagementObject)managementBaseObject;
+                foreach (ManagementBaseObject? o1 in partition.GetRelated("Win32_LogicalDisk")) {
+                    var logical = (ManagementObject)o1;
+                    string letter = logical["Name"].ToString()!;
+                    UsbDevice device = new() {
+                        Name = model,
+                        Id = id,
+                        Letter = letter
+                    };
+                    devices.Add(device);
+                }
+            }
+        }
+
+        return devices;
+    }
+
+
+    /*
+    private static List<UsbDevice> GetAllOnWindows() {
+        List<UsbDevice> devices = [];
+
         var startInfo = new ProcessStartInfo {
             FileName = "wmic.exe",
-            Arguments = "diskdrive where InterfaceType='USB' get Model,SerialNumber /value",
+            Arguments =
+                "path Win32_DiskDrive where InterfaceType='USB' get Model,SerialNumber,DeviceID /value",
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -85,4 +120,5 @@ public static class UsbHelper {
         string part = id[(lastSlash + 1)..];
         return part.Split('&')[0];
     }
+    */
 }

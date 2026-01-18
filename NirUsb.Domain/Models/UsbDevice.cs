@@ -3,4 +3,5 @@
 public class UsbDevice {
     public required string Name { get; init; }
     public required string Id { get; init; }
+    public required string Letter { get; init; }
 }
