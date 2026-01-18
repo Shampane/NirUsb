@@ -8,13 +8,17 @@
 
     <ItemGroup>
         <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.2"/>
-        <PackageReference Include="Scalar.AspNetCore" Version="2.12.11" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Scalar.AspNetCore" Version="2.12.11"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\NirUsb.Application\NirUsb.Application.csproj" />
-      <ProjectReference Include="..\NirUsb.Domain\NirUsb.Domain.csproj" />
-      <ProjectReference Include="..\NirUsb.Infrastructure\NirUsb.Infrastructure.csproj" />
+        <ProjectReference Include="..\NirUsb.Application\NirUsb.Application.csproj"/>
+        <ProjectReference Include="..\NirUsb.Domain\NirUsb.Domain.csproj"/>
+        <ProjectReference Include="..\NirUsb.Infrastructure\NirUsb.Infrastructure.csproj"/>
     </ItemGroup>
 
 </Project>
