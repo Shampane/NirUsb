@@ -28,4 +28,9 @@ public class UserRepository : IUserRepository {
         await _dbContext.Users.AddAsync(user);
         await _dbContext.SaveChangesAsync();
     }
+
+
+    public async Task<bool> IsUserExists(string name) {
+        return await _dbContext.Users.AnyAsync(u => u.Name == name);
+    }
 }
