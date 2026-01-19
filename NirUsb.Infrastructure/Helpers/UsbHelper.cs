@@ -8,20 +8,20 @@ using NirUsb.Domain.Models;
 namespace NirUsb.Infrastructure.Helpers;
 
 public static class UsbHelper {
-    public static List<UsbDevice> GetDevices() {
-        OsTypes? os = OsHelper.GetSystem();
+    public static async Task<UsbDevice?> GetConnectedDevice() {
+        OsTypes? os = OsHelper.DetectSystem();
         return os switch {
-            OsTypes.Windows => GetAllOnWindows(),
-            _ => []
+            OsTypes.Windows => await GetWindowsDevice(),
+            _ => null
         };
     }
 
 
-    public static async Task<bool> WriteKeyToDevice(string letter, string userId, byte[] data) {
+    public static async Task<bool> WriteKeyOnDevice(char letter, string userId, byte[] data) {
         string path = Path.Combine($"{letter}:\\", $"key_{userId}.dat");
 
         try {
-            await File.WriteAllBytesAsync(path, data);
+            await File.WriteAllBytesAsync(path, data).ConfigureAwait(false);
             return true;
         } catch {
             return false;
@@ -29,14 +29,14 @@ public static class UsbHelper {
     }
 
 
-    public static async Task<byte[]?> ReadKeyFromDevice(string letter, string userId) {
+    public static async Task<byte[]?> ReadKeyFromDevice(char letter, string userId) {
         string path = Path.Combine($"{letter}:\\", $"key_{userId}.dat");
         try {
             if (!File.Exists(path)) {
                 return null;
             }
 
-            return await File.ReadAllBytesAsync(path);
+            return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
         } catch {
             return null;
         }
@@ -44,12 +44,26 @@ public static class UsbHelper {
 
 
     [SupportedOSPlatform("windows")]
-    private static List<UsbDevice> GetAllOnWindows() {
-        List<UsbDevice> devices = [];
-        const string script =
-            "Get-Partition | Where-Object { $_.DriveLetter } | Get-Disk | Where-Object { $_.BusType -eq 'USB' } | Select-Object -Property SerialNumber, Model, @{N='Letter';E={(Get-Partition -DiskNumber $_.DiskNumber | Where-Object { $_.DriveLetter }).DriveLetter}} | ConvertTo-Json";
+    private static async Task<UsbDevice?> GetWindowsDevice() {
+        const string script = @"
+            Get-Disk | 
+            Where-Object { $_.BusType -eq 'USB' -and $_.OperationalStatus -eq 'Online' } | 
+            ForEach-Object {
+                $disk = $_;
+                $partitions = Get-Partition -DiskNumber $disk.Number | 
+                             Where-Object { $_.DriveLetter } |
+                             Select-Object -ExpandProperty DriveLetter;
+                
+                foreach ($letter in $partitions) {
+                    [PSCustomObject]@{
+                        Id = $disk.SerialNumber
+                        Name = $disk.Model
+                        Letter = $letter.ToString()
+                    }
+                }
+            } | ConvertTo-Json";
 
-        var startInfo = new ProcessStartInfo {
+        var processInfo = new ProcessStartInfo {
             FileName = "powershell.exe",
             Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"{script}\"",
             RedirectStandardOutput = true,
@@ -58,60 +72,31 @@ public static class UsbHelper {
             StandardOutputEncoding = Encoding.UTF8
         };
 
-        using Process? process = Process.Start(startInfo);
+        using Process? process = Process.Start(processInfo);
         if (process is null) {
-            return [];
+            return null;
         }
 
-        string output = process.StandardOutput.ReadToEnd();
-
-        if (string.IsNullOrWhiteSpace(output)) {
-            return devices.DistinctBy(d => d.Id).ToList();
+        string jsonOutput = (await process.StandardOutput.ReadToEndAsync()).Trim();
+        if (!process.WaitForExit(5000)) {
+            process.Kill();
+            return null;
         }
 
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-
-        string trimmedOutput = output.Trim();
-
-        if (trimmedOutput.StartsWith('{')) {
-            var single = JsonSerializer.Deserialize<RawUsbData>(trimmedOutput, options);
-            if (single is null) {
-                return [];
-            }
-
-            devices.Add(
-                new UsbDevice {
-                    Id = single.SerialNumber.Trim(),
-                    Name = single.Model.Trim(),
-                    Letter = single.Letter
-                }
-            );
-        } else if (trimmedOutput.StartsWith('[')) {
-            var rawData = JsonSerializer.Deserialize<List<RawUsbData>>(trimmedOutput, options);
-            if (rawData is null) {
-                return [];
-            }
-
-            foreach (RawUsbData rawDevice in rawData) {
-                devices.Add(
-                    new UsbDevice {
-                        Id = rawDevice.SerialNumber.Trim(),
-                        Name = rawDevice.Model.Trim(),
-                        Letter = rawDevice.Letter
-                    }
-                );
-            }
-        } else {
-            return [];
+        if (string.IsNullOrWhiteSpace(jsonOutput)) {
+            return null;
         }
 
-        return devices.DistinctBy(d => d.Id).ToList();
-    }
+        JsonSerializerOptions jsonOptions = new() {
+            PropertyNameCaseInsensitive = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
 
+        if (jsonOutput.StartsWith('[')) {
+            return null;
+        }
 
-    private class RawUsbData {
-        public required string SerialNumber { get; init; }
-        public required string Model { get; init; }
-        public required string Letter { get; set; }
+        var device = JsonSerializer.Deserialize<UsbDevice>(jsonOutput, jsonOptions);
+        return device;
     }
 }

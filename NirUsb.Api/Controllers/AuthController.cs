@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using NirUsb.Application.Requests;
 using NirUsb.Domain.Interfaces;
 using NirUsb.Domain.Models;
@@ -21,32 +20,27 @@ public class AuthController : ControllerBase {
 
 
     [HttpPost("register")]
-    public async Task<IActionResult> Register(AuthRequests.RegisterRequest req) {
+    public async Task<IActionResult> Register([FromBody] AuthRequests.RegisterRequest req) {
         if (await _repository.IsUserExists(req.Name)) {
             return Conflict("User is already registered");
         }
 
-        List<UsbDevice> devices = UsbHelper.GetDevices();
-
-        switch (devices.Count) {
-            case 0:
-                return BadRequest("No USB found");
-            case > 1:
-                return BadRequest("Use only one USB");
+        UsbDevice? device = await UsbHelper.GetConnectedDevice();
+        if (device is null) {
+            return Unauthorized("Device not found");
         }
 
-        string deviceId = devices[0].Id;
+        Console.WriteLine(device.Id);
 
         byte[] salt = _cryptoService.GenerateRandomBytes(16);
-        byte[] argon2Key = _cryptoService.DeriveKeyFromCredentials(deviceId, req.Password, salt);
+        byte[] derivedKey =
+            _cryptoService.DeriveKeyFromCredentials(device.Id, req.Password, salt);
 
         (byte[] publicKey, byte[] privateKey) rsaKeys = _cryptoService.GenerateRsaKeys();
 
         byte[] iv = _cryptoService.GenerateRandomBytes(16);
         byte[] encryptedPrivateKey =
-            _cryptoService.EncryptWithAes(argon2Key, rsaKeys.privateKey, iv);
-
-        string letter = devices[0].Letter;
+            _cryptoService.EncryptWithAes(derivedKey, rsaKeys.privateKey, iv);
 
         User user = new() {
             Name = req.Name,
@@ -54,8 +48,8 @@ public class AuthController : ControllerBase {
             Salt = salt
         };
 
-        bool writeOk = await UsbHelper.WriteKeyToDevice(
-            letter, user.Id.ToString(), encryptedPrivateKey
+        bool writeOk = await UsbHelper.WriteKeyOnDevice(
+            device.Letter, user.Id.ToString(), encryptedPrivateKey
         );
         if (!writeOk) {
             return StatusCode(500, "Failed to write to USB");
@@ -73,33 +67,26 @@ public class AuthController : ControllerBase {
             return Unauthorized("Invalid username");
         }
 
-        List<UsbDevice> devices = UsbHelper.GetDevices();
-
-        switch (devices.Count) {
-            case 0:
-                return BadRequest("No USB found");
-            case > 1:
-                return BadRequest("Use only one USB");
-        }
-
-        string deviceId = devices[0].Id;
-
-        byte[] argon2Key =
-            _cryptoService.DeriveKeyFromCredentials(deviceId, req.Password, user.Salt);
-        byte[]? deviceData =
-            await UsbHelper.ReadKeyFromDevice(devices[0].Letter, user.Id.ToString());
-        if (deviceData is null) {
-            return BadRequest("No key data from USB found");
-        }
-
         try {
-            byte[] decryptedPrivateKey = _cryptoService.DecryptWithAes(argon2Key, deviceData);
-            using var rsa = RSA.Create();
-            rsa.ImportPkcs8PrivateKey(decryptedPrivateKey, out _);
-            byte[] derivedPublicKey = rsa.ExportSubjectPublicKeyInfo();
+            UsbDevice? device = await UsbHelper.GetConnectedDevice();
+            if (device is null) {
+                return Unauthorized("Device not found");
+            }
 
-            if (!derivedPublicKey.SequenceEqual(user.PublicKey)) {
-                return Unauthorized("Identity verification failed");
+            byte[] derivedKey = _cryptoService.DeriveKeyFromCredentials(
+                device.Id, req.Password, user.Salt
+            );
+            byte[]? encryptedPrivateKey =
+                await UsbHelper.ReadKeyFromDevice(device.Letter, user.Id.ToString());
+            if (encryptedPrivateKey is null) {
+                return BadRequest("No key data from USB found");
+            }
+
+            bool isVerified = _cryptoService.VerifyUserIdentity(
+                derivedKey, encryptedPrivateKey, user.PublicKey
+            );
+            if (!isVerified) {
+                return Unauthorized("Invalid password or security token");
             }
 
             return Ok(new { Message = "Login successful", UserId = user.Id });

@@ -5,5 +5,13 @@ public interface ICryptoService {
     public (byte[] publicKey, byte[] privateKey) GenerateRsaKeys();
     public byte[] EncryptWithAes(byte[] key, byte[] bytesToWrite, byte[] iv);
     public byte[] DecryptWithAes(ReadOnlySpan<byte> key, ReadOnlySpan<byte> encryptedPackage);
+
+
+    public bool VerifyUserIdentity(
+        ReadOnlySpan<byte> derivedKey, ReadOnlySpan<byte> encryptedPrivateKey,
+        ReadOnlySpan<byte> userPublicKey
+    );
+
+
     public byte[] GenerateRandomBytes(int size);
 }

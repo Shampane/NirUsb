@@ -75,6 +75,20 @@ public class CryptoService : ICryptoService {
     }
 
 
+    public bool VerifyUserIdentity(
+        ReadOnlySpan<byte> derivedKey, ReadOnlySpan<byte> encryptedPrivateKey,
+        ReadOnlySpan<byte> userPublicKey
+    ) {
+        byte[] decryptedPrivateKey = DecryptWithAes(derivedKey, encryptedPrivateKey);
+
+        using var rsa = RSA.Create();
+        rsa.ImportPkcs8PrivateKey(decryptedPrivateKey, out _);
+        byte[] derivedPublicKey = rsa.ExportSubjectPublicKeyInfo();
+
+        return derivedPublicKey.AsSpan().SequenceEqual(userPublicKey);
+    }
+
+
     public byte[] GenerateRandomBytes(int size) {
         return RandomNumberGenerator.GetBytes(size);
     }
