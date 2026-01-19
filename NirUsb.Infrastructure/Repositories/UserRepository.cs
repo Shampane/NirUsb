@@ -7,20 +7,22 @@ namespace NirUsb.Infrastructure.Repositories;
 
 public class UserRepository : IUserRepository {
     private readonly AppDbContext _dbContext;
+    private readonly IQueryable<User> _usersNoTracking;
 
 
     public UserRepository(AppDbContext dbContext) {
         _dbContext = dbContext;
+        _usersNoTracking = _dbContext.Users.AsNoTracking();
     }
 
 
     public async Task<List<User>> GetUsers() {
-        return await _dbContext.Users.ToListAsync();
+        return await _usersNoTracking.ToListAsync();
     }
 
 
     public async Task<User?> GetUserByName(string name) {
-        return await _dbContext.Users.FirstOrDefaultAsync(u => u.Name == name);
+        return await _usersNoTracking.FirstOrDefaultAsync(u => u.Name == name);
     }
 
 
@@ -32,11 +34,10 @@ public class UserRepository : IUserRepository {
 
     public async Task RemoveAllUser() {
         await _dbContext.Users.ExecuteDeleteAsync();
-        await _dbContext.SaveChangesAsync();
     }
 
 
     public async Task<bool> IsUserExists(string name) {
-        return await _dbContext.Users.AnyAsync(u => u.Name == name);
+        return await _usersNoTracking.AnyAsync(u => u.Name == name);
     }
 }

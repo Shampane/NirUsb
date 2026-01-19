@@ -14,7 +14,7 @@ public class AppDbContext : DbContext {
 
     protected override void OnConfiguring(DbContextOptionsBuilder builder) {
         if (!builder.IsConfigured) {
-            builder.UseSqlite("Data Source=mydatabase.db");
+            builder.UseSqlite("Data Source=mydatabase.db;Cache=Shared");
         }
     }
 }

@@ -36,6 +36,6 @@ public class AdminController : ControllerBase {
     [HttpDelete("users")]
     public async Task<IActionResult> RemoveAllUsers() {
         await _userRepository.RemoveAllUser();
-        return Ok();
+        return NoContent();
     }
 }

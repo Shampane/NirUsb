@@ -5,4 +5,9 @@ public static class AuthRequests {
         string Name,
         string Password
     );
+
+    public record LoginRequest(
+        string Name,
+        string Password
+    );
 }
