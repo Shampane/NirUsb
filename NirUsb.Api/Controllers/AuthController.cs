@@ -38,12 +38,13 @@ public class AuthController : ControllerBase {
         string deviceId = devices[0].Id;
 
         byte[] salt = _cryptoService.GenerateRandomBytes(16);
-        byte[] argon2Key = _cryptoService.GenerateKeyFromDeviceId(deviceId, req.Password, salt);
+        byte[] argon2Key = _cryptoService.DeriveKeyFromCredentials(deviceId, req.Password, salt);
 
-        (byte[] publicKey, byte[] privateKey) rsaKeys = _cryptoService.CreateRsaKeys();
+        (byte[] publicKey, byte[] privateKey) rsaKeys = _cryptoService.GenerateRsaKeys();
 
         byte[] iv = _cryptoService.GenerateRandomBytes(16);
-        byte[] encryptedPrivateKey = _cryptoService.CreateAesKey(argon2Key, rsaKeys.privateKey, iv);
+        byte[] encryptedPrivateKey =
+            _cryptoService.EncryptWithAes(argon2Key, rsaKeys.privateKey, iv);
 
         string letter = devices[0].Letter;
 
@@ -83,7 +84,8 @@ public class AuthController : ControllerBase {
 
         string deviceId = devices[0].Id;
 
-        byte[] argon2Key = _cryptoService.GenerateKeyFromDeviceId(deviceId, req.Password, user.Salt);
+        byte[] argon2Key =
+            _cryptoService.DeriveKeyFromCredentials(deviceId, req.Password, user.Salt);
         byte[]? deviceData =
             await UsbHelper.ReadKeyFromDevice(devices[0].Letter, user.Id.ToString());
         if (deviceData is null) {
@@ -91,7 +93,7 @@ public class AuthController : ControllerBase {
         }
 
         try {
-            byte[] decryptedPrivateKey = _cryptoService.DecryptAes(argon2Key, deviceData);
+            byte[] decryptedPrivateKey = _cryptoService.DecryptWithAes(argon2Key, deviceData);
             using var rsa = RSA.Create();
             rsa.ImportPkcs8PrivateKey(decryptedPrivateKey, out _);
             byte[] derivedPublicKey = rsa.ExportSubjectPublicKeyInfo();
