@@ -29,17 +29,33 @@ public static class UsbHelper {
     }
 
 
-    public static async Task<byte[]?> ReadKeyFromDevice(char letter, string userId) {
-        string path = Path.Combine($"{letter}:\\", $"key_{userId}.dat");
-        try {
-            if (!File.Exists(path)) {
-                return null;
+    public static async Task<List<byte[]>> ReadAllDatFilesFromDevice(char letter) {
+        string rootPath = $"{letter}:\\";
+        List<byte[]> results = [];
+        const long maxFileSizeKb = 2 * 1024;
+
+        var directoryInfo = new DirectoryInfo(rootPath);
+        IEnumerable<FileInfo> files = directoryInfo.EnumerateFiles(
+            "*.dat", SearchOption.TopDirectoryOnly
+        );
+
+        foreach (FileInfo file in files) {
+            if (file.Length >= maxFileSizeKb) {
+                continue;
             }
 
-            return await File.ReadAllBytesAsync(path).ConfigureAwait(false);
-        } catch {
-            return null;
+            byte[] content = await File.ReadAllBytesAsync(file.FullName).ConfigureAwait(false);
+            results.Add(content);
         }
+
+        return results;
+    }
+
+
+    public static IEnumerable<string> EnumerateDatFiles(char letter) {
+        return Directory
+            .EnumerateFiles($"{letter}:\\", "*.dat", SearchOption.TopDirectoryOnly)
+            .Where(f => new FileInfo(f).Length < 2 * 1024);
     }
 
 

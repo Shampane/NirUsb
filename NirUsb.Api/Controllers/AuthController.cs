@@ -76,22 +76,42 @@ public class AuthController : ControllerBase {
             byte[] derivedKey = _cryptoService.DeriveKeyFromCredentials(
                 device.Id, req.Password, user.Salt
             );
-            byte[]? encryptedPrivateKey =
-                await UsbHelper.ReadKeyFromDevice(device.Letter, user.Id.ToString());
-            if (encryptedPrivateKey is null) {
-                return BadRequest("No key data from USB found");
-            }
 
-            bool isVerified = _cryptoService.VerifyUserIdentity(
-                derivedKey, encryptedPrivateKey, user.PublicKey
+            IEnumerable<string> filePaths = UsbHelper.EnumerateDatFiles(device.Letter);
+            byte[]? validKey = null;
+
+            await Parallel.ForEachAsync(
+                filePaths, new ParallelOptions {
+                    MaxDegreeOfParallelism = Environment.ProcessorCount
+                }, async (path, ct) => {
+                    if (validKey != null) {
+                        return;
+                    }
+
+                    try {
+                        byte[] content = await System.IO.File
+                            .ReadAllBytesAsync(path, ct)
+                            .ConfigureAwait(false);
+
+                        bool isVerified = _cryptoService.VerifyUserIdentity(
+                            derivedKey, content, user.PublicKey
+                        );
+
+                        if (isVerified) {
+                            validKey = content;
+                        }
+                    } catch {
+                    }
+                }
             );
-            if (!isVerified) {
+
+            if (validKey is null) {
                 return Unauthorized("Invalid password or security token");
             }
 
             return Ok(new { Message = "Login successful", UserId = user.Id });
         } catch {
-            return Unauthorized("Invalid password or security token");
+            return Unauthorized("An error occurred during authentication");
         }
     }
 }
