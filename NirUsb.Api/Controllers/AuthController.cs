@@ -27,24 +27,20 @@ public class AuthController : ControllerBase {
 
         UsbDevice? device = await UsbHelper.GetConnectedDevice();
         if (device is null) {
-            return Unauthorized("Device not found");
+            return Unauthorized("Security device not detected. Please plug in your USB key");
         }
 
-        Console.WriteLine(device.Id);
-
         byte[] salt = _cryptoService.GenerateRandomBytes(16);
-        byte[] derivedKey =
-            _cryptoService.DeriveKeyFromCredentials(device.Id, req.Password, salt);
-
-        (byte[] publicKey, byte[] privateKey) rsaKeys = _cryptoService.GenerateRsaKeys();
-
         byte[] iv = _cryptoService.GenerateRandomBytes(16);
-        byte[] encryptedPrivateKey =
-            _cryptoService.EncryptWithAes(derivedKey, rsaKeys.privateKey, iv);
+
+        (byte[] publicKey, byte[] privateKey) = _cryptoService.GenerateRsaKeys();
+        byte[] derivedKey = _cryptoService.DeriveKeyFromCredentials(device.Id, req.Password, salt);
+
+        byte[] encryptedPrivateKey = _cryptoService.EncryptWithAes(derivedKey, privateKey, iv);
 
         User user = new() {
             Name = req.Name,
-            PublicKey = rsaKeys.publicKey,
+            PublicKey = publicKey,
             Salt = salt
         };
 
@@ -52,16 +48,26 @@ public class AuthController : ControllerBase {
             device.Letter, user.Id.ToString(), encryptedPrivateKey
         );
         if (!writeOk) {
-            return StatusCode(500, "Failed to write to USB");
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable, "Failed to initialize USB security token."
+            );
         }
 
-        await _repository.CreateUser(user);
-        return Created($"auth/{user.Id}", user);
+        try {
+            await _repository.CreateUser(user);
+        } catch (Exception ex) {
+            return StatusCode(500, "Internal server error during registration.");
+        }
+
+        return CreatedAtAction(
+            nameof(Login),
+            new { id = user.Id }, new { user.Id, user.Name }
+        );
     }
 
 
     [HttpPost("login")]
-    public async Task<IActionResult> Login(AuthRequests.LoginRequest req) {
+    public async Task<IActionResult> Login([FromBody] AuthRequests.LoginRequest req) {
         User? user = await _repository.GetUserByName(req.Name);
         if (user == null) {
             return Unauthorized("Invalid username");

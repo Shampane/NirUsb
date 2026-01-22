@@ -14,20 +14,24 @@ public class CryptoService : ICryptoService {
     private const int RsaKeySizeBits = 2048;
 
     private const int AesKeySizeBits = 256;
+    private const int AesIvSize = 16;
 
 
     public byte[] DeriveKeyFromCredentials(string deviceId, string password, byte[] salt) {
         string credentials = string.Concat(deviceId, password);
         byte[] credentialsBytes = Encoding.UTF8.GetBytes(credentials);
 
-        using var argon2 = new Argon2id(credentialsBytes);
+        try {
+            using var argon2 = new Argon2id(credentialsBytes);
+            argon2.Salt = salt;
+            argon2.DegreeOfParallelism = Argon2DegreeOfParallelism;
+            argon2.Iterations = Argon2Iterations;
+            argon2.MemorySize = Argon2MemorySizeKb;
 
-        argon2.Salt = salt;
-        argon2.DegreeOfParallelism = Argon2DegreeOfParallelism;
-        argon2.Iterations = Argon2Iterations;
-        argon2.MemorySize = Argon2MemorySizeKb;
-
-        return argon2.GetBytes(Argon2HashLengthBytes);
+            return argon2.GetBytes(Argon2HashLengthBytes);
+        } finally {
+            CryptographicOperations.ZeroMemory(credentialsBytes);
+        }
     }
 
 
@@ -45,33 +49,36 @@ public class CryptoService : ICryptoService {
         aes.Padding = PaddingMode.PKCS7;
         aes.IV = iv;
 
-        using var ms = new MemoryStream();
-        using var cs = new CryptoStream(ms, aes.CreateEncryptor(), CryptoStreamMode.Write);
+        int ciphertextLength = aes.GetCiphertextLengthCbc(text.Length);
+        byte[] result = new byte[AesIvSize + ciphertextLength];
 
-        ms.Write(iv, 0, iv.Length);
-        cs.Write(text, 0, text.Length);
-        cs.FlushFinalBlock();
+        iv.CopyTo(result.AsSpan(0, AesIvSize));
+        int written = aes.EncryptCbc(text, iv, result.AsSpan(AesIvSize));
 
-        return ms.ToArray();
+        return result.Length == AesIvSize + written
+            ? result
+            : result[..(AesIvSize + written)];
     }
 
 
     public byte[] DecryptWithAes(ReadOnlySpan<byte> key, ReadOnlySpan<byte> encryptedData) {
-        byte[] iv = encryptedData[..16].ToArray();
-        byte[] ciphertext = encryptedData[16..].ToArray();
+        if (encryptedData.Length <= AesIvSize) {
+            throw new ArgumentException("Invalid data");
+        }
+
+        ReadOnlySpan<byte> iv = encryptedData[..AesIvSize];
+        ReadOnlySpan<byte> ciphertext = encryptedData[AesIvSize..];
 
         using var aes = Aes.Create();
         aes.Key = key.ToArray();
-        aes.IV = iv;
+        aes.IV = iv.ToArray();
         aes.Mode = CipherMode.CBC;
         aes.Padding = PaddingMode.PKCS7;
 
-        using var ms = new MemoryStream(ciphertext);
-        using var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Read);
+        byte[] result = new byte[ciphertext.Length];
+        int resultLength = aes.DecryptCbc(ciphertext, iv, result);
 
-        using var result = new MemoryStream();
-        cs.CopyTo(result);
-        return result.ToArray();
+        return result[..resultLength];
     }
 
 
@@ -79,13 +86,17 @@ public class CryptoService : ICryptoService {
         ReadOnlySpan<byte> derivedKey, ReadOnlySpan<byte> encryptedPrivateKey,
         ReadOnlySpan<byte> userPublicKey
     ) {
-        byte[] decryptedPrivateKey = DecryptWithAes(derivedKey, encryptedPrivateKey);
+        try {
+            byte[] decryptedPrivateKey = DecryptWithAes(derivedKey, encryptedPrivateKey);
 
-        using var rsa = RSA.Create();
-        rsa.ImportPkcs8PrivateKey(decryptedPrivateKey, out _);
-        byte[] derivedPublicKey = rsa.ExportSubjectPublicKeyInfo();
+            using var rsa = RSA.Create();
+            rsa.ImportPkcs8PrivateKey(decryptedPrivateKey, out _);
+            byte[] derivedPublicKey = rsa.ExportSubjectPublicKeyInfo();
 
-        return derivedPublicKey.AsSpan().SequenceEqual(userPublicKey);
+            return CryptographicOperations.FixedTimeEquals(derivedPublicKey, userPublicKey);
+        } catch {
+            return false;
+        }
     }
 
 

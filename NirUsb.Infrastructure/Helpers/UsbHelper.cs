@@ -9,8 +9,7 @@ namespace NirUsb.Infrastructure.Helpers;
 
 public static class UsbHelper {
     public static async Task<UsbDevice?> GetConnectedDevice() {
-        OsTypes? os = OsHelper.DetectSystem();
-        return os switch {
+        return OsHelper.DetectSystem() switch {
             OsTypes.Windows => await GetWindowsDevice(),
             _ => null
         };
@@ -23,61 +22,43 @@ public static class UsbHelper {
         try {
             await File.WriteAllBytesAsync(path, data).ConfigureAwait(false);
             return true;
-        } catch {
+        } catch (IOException) {
             return false;
         }
     }
 
 
-    public static async Task<List<byte[]>> ReadAllDatFilesFromDevice(char letter) {
-        string rootPath = $"{letter}:\\";
-        List<byte[]> results = [];
-        const long maxFileSizeKb = 2 * 1024;
-
-        var directoryInfo = new DirectoryInfo(rootPath);
-        IEnumerable<FileInfo> files = directoryInfo.EnumerateFiles(
-            "*.dat", SearchOption.TopDirectoryOnly
-        );
-
-        foreach (FileInfo file in files) {
-            if (file.Length >= maxFileSizeKb) {
-                continue;
-            }
-
-            byte[] content = await File.ReadAllBytesAsync(file.FullName).ConfigureAwait(false);
-            results.Add(content);
+    public static IEnumerable<string> EnumerateDatFiles(char letter) {
+        string root = $"{letter}:/";
+        if (!Directory.Exists(root)) {
+            return [];
         }
 
-        return results;
-    }
-
-
-    public static IEnumerable<string> EnumerateDatFiles(char letter) {
         return Directory
-            .EnumerateFiles($"{letter}:\\", "*.dat", SearchOption.TopDirectoryOnly)
-            .Where(f => new FileInfo(f).Length < 2 * 1024);
+            .EnumerateFiles(root, "*.dat", SearchOption.TopDirectoryOnly)
+            .Where(f => {
+                    var info = new FileInfo(f);
+                    return info is { Exists: true, Length: < 2 * 1024 };
+                }
+            );
     }
 
 
     [SupportedOSPlatform("windows")]
     private static async Task<UsbDevice?> GetWindowsDevice() {
-        const string script = @"
-            Get-Disk | 
-            Where-Object { $_.BusType -eq 'USB' -and $_.OperationalStatus -eq 'Online' } | 
-            ForEach-Object {
-                $disk = $_;
-                $partitions = Get-Partition -DiskNumber $disk.Number | 
-                             Where-Object { $_.DriveLetter } |
-                             Select-Object -ExpandProperty DriveLetter;
-                
-                foreach ($letter in $partitions) {
-                    [PSCustomObject]@{
-                        Id = $disk.SerialNumber
-                        Name = $disk.Model
-                        Letter = $letter.ToString()
-                    }
-                }
-            } | ConvertTo-Json";
+        const string script = """
+                              Get-Disk | Where-Object { $_.BusType -eq 'USB' } | ForEach-Object {
+                                  $disk = $_
+                                  $letter = (Get-Partition -DiskNumber $disk.Number | Where-Object DriveLetter).DriveLetter
+                                  if ($letter) {
+                                      [PSCustomObject]@{
+                                          Id = $disk.SerialNumber
+                                          Name = $disk.Model
+                                          Letter = $letter[0].ToString()
+                                      }
+                                  }
+                              } | ConvertTo-Json
+                              """;
 
         var processInfo = new ProcessStartInfo {
             FileName = "powershell.exe",
@@ -88,31 +69,34 @@ public static class UsbHelper {
             StandardOutputEncoding = Encoding.UTF8
         };
 
-        using Process? process = Process.Start(processInfo);
-        if (process is null) {
+        try {
+            using Process? process = Process.Start(processInfo);
+            if (process is null) {
+                return null;
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            string jsonOutput = await process.StandardOutput.ReadToEndAsync(cts.Token);
+
+            await process.WaitForExitAsync(cts.Token);
+
+            if (string.IsNullOrWhiteSpace(jsonOutput)) {
+                return null;
+            }
+
+            JsonSerializerOptions jsonOptions = new() {
+                PropertyNameCaseInsensitive = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+
+            if (!jsonOutput.TrimStart().StartsWith('[')) {
+                return JsonSerializer.Deserialize<UsbDevice>(jsonOutput, jsonOptions);
+            }
+
+            var devices = JsonSerializer.Deserialize<List<UsbDevice>>(jsonOutput, jsonOptions);
+            return devices?.FirstOrDefault();
+        } catch {
             return null;
         }
-
-        string jsonOutput = (await process.StandardOutput.ReadToEndAsync()).Trim();
-        if (!process.WaitForExit(5000)) {
-            process.Kill();
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(jsonOutput)) {
-            return null;
-        }
-
-        JsonSerializerOptions jsonOptions = new() {
-            PropertyNameCaseInsensitive = true,
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        };
-
-        if (jsonOutput.StartsWith('[')) {
-            return null;
-        }
-
-        var device = JsonSerializer.Deserialize<UsbDevice>(jsonOutput, jsonOptions);
-        return device;
     }
 }
